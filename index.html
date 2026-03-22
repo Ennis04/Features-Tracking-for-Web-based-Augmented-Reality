@@ -1,0 +1,64 @@
+<!-- Group Members: -->
+<!-- 1. ENNIS LAM SI HOONG -->
+<!-- 2. LIEW CHOON PANG -->
+<!-- 3. SOO ZHEN YANG -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Feature Tracking for Web-based Augmented Reality</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="page-container">
+    <header class="page-header">
+      <h1>Feature Tracking for Web-based Augmented Reality</h1>
+      <p class="subtitle">
+        Upload an image to generate AR features-based markers.
+      </p>
+    </header>
+
+    <main class="content-grid">
+      <!-- Upload Section -->
+      <section class="card upload-card">
+        <h2>Upload Image</h2>
+        <p class="section-description">
+          Select an image file from your device to begin.
+        </p>
+
+        <label for="image-upload" class="upload-box">
+          <span class="upload-icon">📁</span>
+          <span class="upload-title">Choose an image</span>
+          <input type="file" id="image-upload" accept="image/*" hidden />
+        </label>
+
+        <p id="file-name" class="file-name">No file selected</p>
+      </section>
+
+      <!-- Preview Section -->
+      <section class="card preview-card">
+        <h2>Preview</h2>
+        <div id="preview-box" class="preview-box">
+          <span id="preview-placeholder" class="preview-placeholder">Preview</span>
+          <img id="image-preview" src="" alt="Image Preview" />
+        </div>
+
+        <div id="action-buttons" class="button-group hidden">
+          <button id="generate-btn" class="btn btn-primary" type="button">
+            Generate
+          </button>
+          <button id="save-btn" class="btn btn-secondary btn-disabled" type="button" disabled>
+            Save
+          </button>
+        </div>
+
+        <p id="status-message" class="status-message"></p>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
