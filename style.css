@@ -92,12 +92,8 @@ body {
   color: #1d4ed8;
 }
 
-.upload-note {
-  font-size: 0.95rem;
-  color: #6b7280;
-}
-
-.file-name {
+.file-name,
+.model-file-name {
   margin-top: 14px;
   font-size: 0.95rem;
   color: #4b5563;
@@ -106,7 +102,7 @@ body {
 
 .preview-box {
   width: 100%;
-  min-height: 280px;
+  min-height: 320px;
   border: 2px solid #d1d5db;
   border-radius: 14px;
   background: #f9fafb;
@@ -123,18 +119,24 @@ body {
   font-weight: 600;
 }
 
-#image-preview {
+#image-preview,
+#preview-canvas {
   display: none;
   width: 100%;
   height: 100%;
   object-fit: contain;
-  max-height: 360px;
+  max-height: 420px;
+}
+
+#preview-canvas {
+  background: #fff;
 }
 
 .button-group {
   display: flex;
   gap: 12px;
   margin-top: 18px;
+  flex-wrap: wrap;
 }
 
 .btn {
@@ -165,10 +167,67 @@ body {
   background: #059669;
 }
 
+.btn-outline {
+  background: white;
+  color: #2563eb;
+  border: 1px solid #2563eb;
+}
+
+.btn-outline:hover {
+  background: #eff6ff;
+}
+
 .btn-disabled {
   background: #9ca3af;
   cursor: not-allowed;
   opacity: 0.75;
+}
+
+.model-panel {
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.model-panel h3 {
+  margin-bottom: 8px;
+  color: #111827;
+}
+
+.model-description {
+  color: #6b7280;
+  margin-bottom: 16px;
+  font-size: 0.95rem;
+}
+
+.model-select-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.model-select {
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  background: #fff;
+  color: #1f2937;
+}
+
+.model-select:focus {
+  outline: none;
+  border-color: #60a5fa;
+}
+
+.divider {
+  text-align: center;
+  margin: 16px 0;
+  color: #9ca3af;
+  font-weight: 600;
 }
 
 .status-message {
@@ -178,15 +237,44 @@ body {
   min-height: 20px;
 }
 
-.hidden {
-  display: none;
+.ar-view {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  background: #000;
+  z-index: 9999;
 }
 
-.page-footer {
-  text-align: center;
-  margin-top: 28px;
-  color: #6b7280;
-  font-size: 0.9rem;
+#ar-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.back-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111827;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.back-btn:hover {
+  background: #ffffff;
+}
+
+.hidden {
+  display: none;
 }
 
 @media (max-width: 900px) {

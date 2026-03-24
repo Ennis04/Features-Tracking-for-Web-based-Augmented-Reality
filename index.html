@@ -1,8 +1,3 @@
-<!-- Group Members: -->
-<!-- 1. ENNIS LAM SI HOONG -->
-<!-- 2. LIEW CHOON PANG -->
-<!-- 3. SOO ZHEN YANG -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -21,7 +16,6 @@
     </header>
 
     <main class="content-grid">
-      <!-- Upload Section -->
       <section class="card upload-card">
         <h2>Upload Image</h2>
         <p class="section-description">
@@ -37,21 +31,46 @@
         <p id="file-name" class="file-name">No file selected</p>
       </section>
 
-      <!-- Preview Section -->
       <section class="card preview-card">
         <h2>Preview</h2>
+
         <div id="preview-box" class="preview-box">
           <span id="preview-placeholder" class="preview-placeholder">Preview</span>
           <img id="image-preview" src="" alt="Image Preview" />
-          <canvas id="output-canvas" style="display: none; width: 100%; height: 100%; object-fit: contain; max-height: 360px;"></canvas>
+          <canvas id="preview-canvas"></canvas>
         </div>
 
         <div id="action-buttons" class="button-group hidden">
           <button id="generate-btn" class="btn btn-primary" type="button">
             Generate
           </button>
+          <button id="link-model-btn" class="btn btn-secondary btn-disabled" type="button" disabled>
+            Link 3D Model
+          </button>
           <button id="save-btn" class="btn btn-secondary btn-disabled" type="button" disabled>
             Save
+          </button>
+        </div>
+
+        <div id="model-panel" class="model-panel hidden">
+          <h3>Select 3D Model</h3>
+          <p class="model-description">
+            Choose one predefined 3D model shape.
+          </p>
+
+          <div class="model-select-section">
+            <label for="model-select" class="input-label">3D Model Options</label>
+            <select id="model-select" class="model-select">
+              <option value="">-- Select a model --</option>
+              <option value="sphere">Sphere</option>
+              <option value="cube">Cube</option>
+              <option value="pyramid">Pyramid</option>
+              <option value="cuboid">Cuboid</option>
+            </select>
+          </div>
+          
+          <button id="start-ar-btn" class="btn btn-secondary btn-disabled" type="button" disabled>
+            Start AR
           </button>
         </div>
 
@@ -60,8 +79,13 @@
     </main>
   </div>
 
-  <script src="app.js"></script>
-  <!-- Load OpenCV.js -->
+  <div id="ar-view" class="ar-view hidden">
+    <video id="ar-video" autoplay playsinline></video>
+    <canvas id="ar-overlay-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none;"></canvas>
+    <button id="back-btn" class="back-btn" type="button">Back</button>
+  </div>
+
   <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
+  <script src="app.js"></script>
 </body>
 </html>
