@@ -9,6 +9,18 @@ const statusMessage = document.getElementById("status-message");
 
 let isGenerated = false;
 let uploadedImageData = "";
+let cvReady = false;
+
+function onOpenCvReady() {
+  // OpenCV.js uses WebAssembly which initializes asynchronously.
+  cv['onRuntimeInitialized'] = () => {
+    cvReady = true;
+    const statusMsg = document.getElementById("status-message");
+    if (statusMsg.textContent === "" || statusMsg.textContent.includes("wait")) {
+      statusMsg.textContent = "OpenCV.js loaded successfully. Ready.";
+    }
+  };
+}
 
 // Handle image upload
 imageUpload.addEventListener("change", function () {
@@ -28,6 +40,7 @@ imageUpload.addEventListener("change", function () {
     imagePreview.src = uploadedImageData;
     imagePreview.style.display = "block";
     previewPlaceholder.style.display = "none";
+    document.getElementById("output-canvas").style.display = "none";
 
     actionButtons.classList.remove("hidden");
 
@@ -46,11 +59,54 @@ generateBtn.addEventListener("click", function () {
     statusMessage.textContent = "Please upload an image first.";
     return;
   }
+  if (!cvReady) {
+    statusMessage.textContent = "OpenCV.js not loaded.";
+    return;
+  }
 
-  // Placeholder for future generate function
-  isGenerated = true;
-  enableSaveButton();
-  statusMessage.textContent = "Features generated successfully. You can now save the result.";
+  try {
+    statusMessage.textContent = "Processing image...";
+
+    const srcImg = document.getElementById("image-preview");
+    const src = cv.imread(srcImg);
+    
+    const gray = new cv.Mat();
+    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+
+    // ORB
+    const orb = new cv.ORB(500); // Max 500 features
+    const keypoints = new cv.KeyPointVector();
+    const descriptors = new cv.Mat();
+    
+    orb.detect(gray, keypoints);
+
+    const outImg = new cv.Mat();
+    const color = new cv.Scalar(255, 0, 0, 255);
+    cv.drawKeypoints(gray, keypoints, outImg, color);
+    
+    const outputCanvas = document.getElementById("output-canvas");
+    cv.imshow("output-canvas", outImg);
+    
+    srcImg.style.display = "none";
+    outputCanvas.style.display = "block";
+
+    const numFeatures = keypoints.size();
+
+    // Clean up memory
+    src.delete();
+    gray.delete();
+    orb.delete();
+    keypoints.delete();
+    descriptors.delete();
+    outImg.delete();
+
+    isGenerated = true;
+    enableSaveButton();
+    statusMessage.textContent = `Features generated successfully! Found ${numFeatures} ORB features on grayscale image.`;
+  } catch (err) {
+    console.error("OpenCV Processing Error: ", err);
+    statusMessage.textContent = "Error generating features: " + err.message;
+  }
 });
 
 // Save button logic
@@ -77,6 +133,8 @@ function enableSaveButton() {
 function resetPreview() {
   imagePreview.src = "";
   imagePreview.style.display = "none";
+  const outputCanvas = document.getElementById("output-canvas");
+  if (outputCanvas) outputCanvas.style.display = "none";
   previewPlaceholder.style.display = "block";
   fileNameText.textContent = "No file selected";
   actionButtons.classList.add("hidden");
