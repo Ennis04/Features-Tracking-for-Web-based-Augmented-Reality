@@ -16,6 +16,7 @@ const modelSelect = document.getElementById("model-select");
 const arView = document.getElementById("ar-view");
 const arVideo = document.getElementById("ar-video");
 const arOverlayCanvas = document.getElementById("ar-overlay-canvas");
+const threejsCanvas = document.getElementById("threejs-canvas");
 const backBtn = document.getElementById("back-btn");
 
 let isGenerated = false;
@@ -24,6 +25,8 @@ let selectedModel = "";
 let originalImage = new Image();
 let webcamStream = null;
 let cvReady = false;
+
+let scene, camera, renderer, arModel;
 
 let refKeypoints = null;
 let refDescriptors = null;
@@ -38,6 +41,9 @@ let frameKeypoints = null;
 let frameDescriptors = null;
 let orb = null;
 let bfMatcher = null;
+
+let cvCameraMatrix = null;
+let cvDistCoeffs = null;
 
 function onOpenCvReady() {
   cv['onRuntimeInitialized'] = () => {
@@ -159,9 +165,46 @@ startArBtn.addEventListener("click", async function () {
         if (arVideo.videoWidth > 0) {
           clearInterval(checkVideoSize);
           
+          arVideo.width = arVideo.videoWidth;
+          arVideo.height = arVideo.videoHeight;
           arOverlayCanvas.width = arVideo.videoWidth;
           arOverlayCanvas.height = arVideo.videoHeight;
           
+          scene = new THREE.Scene();
+          
+          let fov = 2 * Math.atan(arVideo.videoHeight / (2 * arVideo.videoWidth)) * (180 / Math.PI);
+          camera = new THREE.PerspectiveCamera(fov, arVideo.videoWidth / arVideo.videoHeight, 0.1, 10000);
+          
+          let focal = arVideo.videoWidth;
+          let cx = arVideo.videoWidth / 2;
+          let cy = arVideo.videoHeight / 2;
+          cvCameraMatrix = cv.matFromArray(3, 3, cv.CV_64F, [focal, 0, cx, 0, focal, cy, 0, 0, 1]);
+          cvDistCoeffs = cv.Mat.zeros(4, 1, cv.CV_64F);
+
+          renderer = new THREE.WebGLRenderer({ canvas: threejsCanvas, alpha: true, antialias: true });
+          
+          renderer.setSize(arVideo.videoWidth, arVideo.videoHeight, false);
+          
+          let ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+          scene.add(ambientLight);
+          let dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+          dirLight.position.set(0, 0, 1);
+          scene.add(dirLight);
+
+          let geometry;
+          const material = new THREE.MeshStandardMaterial({ color: 0x4ade80, roughness: 0.4, metalness: 0.1 });
+          
+
+          if (selectedModel === "sphere") { geometry = new THREE.SphereGeometry(refWidth/3, 32, 32); geometry.translate(0, 0, 50); }
+          else if (selectedModel === "cuboid") { geometry = new THREE.BoxGeometry(refWidth/3, refHeight/2, 50); geometry.translate(0, 0, 50); }
+          else if (selectedModel === "pyramid") { geometry = new THREE.ConeGeometry(refWidth/3, refWidth/2, 4); geometry.translate(0, 0, 50); geometry.rotateX(Math.PI/2); }
+          else { geometry = new THREE.BoxGeometry(refWidth/2, refHeight/2, refWidth/2); geometry.translate(0, 0, 50); }
+          
+          arModel = new THREE.Mesh(geometry, material);
+          arModel.visible = false;
+          arModel.matrixAutoUpdate = false;
+          scene.add(arModel);
+
           arCap = new cv.VideoCapture(arVideo);
           frameSrc = new cv.Mat(arVideo.videoHeight, arVideo.videoWidth, cv.CV_8UC4);
           frameGray = new cv.Mat();
@@ -201,7 +244,6 @@ function processAR() {
     orb.detectAndCompute(frameGray, new cv.Mat(), frameKeypoints, frameDescriptors);
 
     if (frameDescriptors.rows > 0 && refDescriptors.rows > 0) {
-      
       let matches = new cv.DMatchVector();
       bfMatcher.match(refDescriptors, frameDescriptors, matches);
 
@@ -218,10 +260,12 @@ function processAR() {
         let trainIdx = goodMatches[i].trainIdx;
         let pt = frameKeypoints.get(trainIdx).pt;
         ctx.beginPath();
-        ctx.arc(pt.x, pt.y, 5, 0, 2 * Math.PI);
+        ctx.arc(pt.x, pt.y, 2, 0, 2 * Math.PI);
         ctx.fill();
       }
       
+      arModel.visible = false;
+
       if (goodMatches.length >= 8) {
         let srcPts = [];
         let dstPts = [];
@@ -237,14 +281,9 @@ function processAR() {
         let frameMat = cv.matFromArray(goodMatches.length, 1, cv.CV_32FC2, dstPts);
 
         let H = cv.findHomography(refMat, frameMat, cv.RANSAC, 8.0);
-        
+
         if (!H.empty()) {
-          let objCorners = cv.matFromArray(4, 1, cv.CV_32FC2, [
-            0, 0, 
-            refWidth, 0, 
-            refWidth, refHeight, 
-            0, refHeight
-          ]);
+          let objCorners = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, refWidth, 0, refWidth, refHeight, 0, refHeight]);
           let sceneCorners = new cv.Mat();
           
           cv.perspectiveTransform(objCorners, sceneCorners, H);
@@ -259,12 +298,42 @@ function processAR() {
           ctx.closePath();
           ctx.stroke();
 
-          ctx.fillStyle = "springgreen";
-          ctx.font = "bold 24px Arial";
-          ctx.fillText("TRACKED", sceneCorners.data32F[0], sceneCorners.data32F[1] - 10);
+          let objPts3D = cv.matFromArray(4, 1, cv.CV_32FC3, [
+            -refWidth/2, -refHeight/2, 0,
+             refWidth/2, -refHeight/2, 0,
+             refWidth/2,  refHeight/2, 0,
+            -refWidth/2,  refHeight/2, 0
+          ]);
+          
+          let imgPts2D = cv.matFromArray(4, 1, cv.CV_32FC2, [
+            sceneCorners.data32F[0], sceneCorners.data32F[1],
+            sceneCorners.data32F[2], sceneCorners.data32F[3],
+            sceneCorners.data32F[4], sceneCorners.data32F[5],
+            sceneCorners.data32F[6], sceneCorners.data32F[7]
+          ]);
 
-          objCorners.delete();
-          sceneCorners.delete();
+          let rvec = new cv.Mat();
+          let tvec = new cv.Mat();
+          
+          cv.solvePnP(objPts3D, imgPts2D, cvCameraMatrix, cvDistCoeffs, rvec, tvec, false, cv.SOLVEPNP_ITERATIVE);
+          
+          let R = new cv.Mat();
+          cv.Rodrigues(rvec, R);
+          
+          let r = R.data64F;
+          let m = new THREE.Matrix4();
+          m.set(
+             r[0], -r[1], -r[2],  tvec.data64F[0],
+            -r[3],  r[4],  r[5], -tvec.data64F[1],
+            -r[6],  r[7],  r[8], -tvec.data64F[2],
+             0,      0,      0,   1
+          );
+
+          arModel.matrix.copy(m);
+          arModel.visible = true;
+
+          objPts3D.delete(); imgPts2D.delete(); rvec.delete(); tvec.delete(); R.delete();
+          objCorners.delete(); sceneCorners.delete();
         }
         
         refMat.delete();
@@ -274,7 +343,13 @@ function processAR() {
       matches.delete();
     }
   } catch(e) {
-    console.error(e);
+    if (e !== "10041136") {
+      console.error(e);
+    }
+  }
+
+  if (renderer && scene && camera) {
+    renderer.render(scene, camera);
   }
 
   arLoopId = requestAnimationFrame(processAR);
