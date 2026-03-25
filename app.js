@@ -198,7 +198,7 @@ startArBtn.addEventListener("click", async function () {
           if (selectedModel === "sphere") { geometry = new THREE.SphereGeometry(refWidth/3, 32, 32); geometry.translate(0, 0, 50); }
           else if (selectedModel === "cuboid") { geometry = new THREE.BoxGeometry(refWidth/3, refHeight/2, 50); geometry.translate(0, 0, 50); }
           else if (selectedModel === "pyramid") { geometry = new THREE.ConeGeometry(refWidth/3, refWidth/2, 4); geometry.translate(0, 0, 50); geometry.rotateX(Math.PI/2); }
-          else { geometry = new THREE.BoxGeometry(refWidth/2, refHeight/2, refWidth/2); geometry.translate(0, 0, 50); }
+          else { geometry = new THREE.BoxGeometry(refWidth/2, refWidth/2, refWidth/2); geometry.translate(0, 0, 50); }
           
           arModel = new THREE.Mesh(geometry, material);
           arModel.visible = false;
