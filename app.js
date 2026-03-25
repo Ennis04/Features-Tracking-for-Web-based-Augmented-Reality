@@ -23,7 +23,6 @@ let uploadedImageData = "";
 let selectedModel = "";
 let originalImage = new Image();
 let webcamStream = null;
-
 let cvReady = false;
 
 let refKeypoints = null;
@@ -49,12 +48,13 @@ function onOpenCvReady() {
   };
 }
 
-// Upload image
 imageUpload.addEventListener("change", function () {
   const file = this.files[0];
   if (!file) { resetPreview(); return; }
+  
   fileNameText.textContent = `Selected file: ${file.name}`;
   const reader = new FileReader();
+  
   reader.onload = function (event) {
     uploadedImageData = event.target.result;
     originalImage.onload = function () {
@@ -92,6 +92,7 @@ generateBtn.addEventListener("click", function () {
     refWidth = Math.floor(refWidth * scale);
     refHeight = Math.floor(refHeight * scale);
   }
+  
   previewCanvas.width = refWidth;
   previewCanvas.height = refHeight;
   ctx.clearRect(0, 0, refWidth, refHeight);
@@ -104,20 +105,21 @@ generateBtn.addEventListener("click", function () {
   let gray = new cv.Mat();
   cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
 
+  //ORB
+  if(!orb) orb = new cv.ORB(500); 
   refKeypoints = new cv.KeyPointVector();
   refDescriptors = new cv.Mat();
-  
-  if(!orb) orb = new cv.ORB(500);
   
   orb.detectAndCompute(gray, new cv.Mat(), refKeypoints, refDescriptors);
 
   let outImg = new cv.Mat();
-  let color = new cv.Scalar(255, 0, 0, 255);
-  cv.drawKeypoints(gray, refKeypoints, outImg, color);
-
+  let dotColor = new cv.Scalar(255, 0, 0, 255); 
+  cv.drawKeypoints(gray, refKeypoints, outImg, dotColor);
   cv.imshow("preview-canvas", outImg);
 
-  src.delete(); gray.delete(); outImg.delete();
+  src.delete(); 
+  gray.delete(); 
+  outImg.delete();
 
   isGenerated = true;
   enableActionButtons();
@@ -149,12 +151,14 @@ startArBtn.addEventListener("click", async function () {
     });
     
     arVideo.srcObject = webcamStream;
+    
     arVideo.onloadedmetadata = () => {
       arVideo.play();
       
       const checkVideoSize = setInterval(() => {
         if (arVideo.videoWidth > 0) {
           clearInterval(checkVideoSize);
+          
           arOverlayCanvas.width = arVideo.videoWidth;
           arOverlayCanvas.height = arVideo.videoHeight;
           
@@ -163,6 +167,7 @@ startArBtn.addEventListener("click", async function () {
           frameGray = new cv.Mat();
           frameKeypoints = new cv.KeyPointVector();
           frameDescriptors = new cv.Mat();
+          
           if(!bfMatcher) bfMatcher = new cv.BFMatcher(cv.NORM_HAMMING, true);
 
           arLoopId = requestAnimationFrame(processAR);
@@ -173,6 +178,7 @@ startArBtn.addEventListener("click", async function () {
     arView.classList.remove("hidden");
     document.body.style.overflow = "hidden";
     statusMessage.textContent = `Tracking started. Point camera at the marker.`;
+    
   } catch (error) {
     statusMessage.textContent = "Unable to access the webcam.";
   }
@@ -195,6 +201,7 @@ function processAR() {
     orb.detectAndCompute(frameGray, new cv.Mat(), frameKeypoints, frameDescriptors);
 
     if (frameDescriptors.rows > 0 && refDescriptors.rows > 0) {
+      
       let matches = new cv.DMatchVector();
       bfMatcher.match(refDescriptors, frameDescriptors, matches);
 
@@ -218,6 +225,7 @@ function processAR() {
       if (goodMatches.length >= 8) {
         let srcPts = [];
         let dstPts = [];
+        
         for (let i = 0; i < goodMatches.length; i++) {
           let refPt = refKeypoints.get(goodMatches[i].queryIdx).pt;
           let framePt = frameKeypoints.get(goodMatches[i].trainIdx).pt;
@@ -238,9 +246,9 @@ function processAR() {
             0, refHeight
           ]);
           let sceneCorners = new cv.Mat();
+          
           cv.perspectiveTransform(objCorners, sceneCorners, H);
 
-          // Draw a Box around the tracked image
           ctx.strokeStyle = "springgreen";
           ctx.lineWidth = 4;
           ctx.beginPath();
@@ -258,6 +266,7 @@ function processAR() {
           objCorners.delete();
           sceneCorners.delete();
         }
+        
         refMat.delete();
         frameMat.delete();
         H.delete();
@@ -265,26 +274,12 @@ function processAR() {
       matches.delete();
     }
   } catch(e) {
-    let errMsg = "";
-    if (typeof e === 'number') {
-      errMsg = "Exception Code: " + e;
-    } else if (typeof e === 'string') {
-      errMsg = e;
-    } else if (e instanceof Error) {
-      errMsg = e.message;
-    } else {
-      errMsg = JSON.stringify(e);
-    }
-
-    ctx.fillStyle = "red";
-    ctx.font = "bold 18px Arial";
-    ctx.fillText("OpenCV Error: " + errMsg, 20, 40);
+    console.error(e);
   }
 
   arLoopId = requestAnimationFrame(processAR);
 }
 
-// Save
 saveBtn.addEventListener("click", function () {
   if (!isGenerated) return;
   const link = document.createElement("a");
@@ -319,6 +314,7 @@ function closeArView() {
     webcamStream.getTracks().forEach((track) => track.stop());
     webcamStream = null;
   }
+  
   if (frameSrc) { frameSrc.delete(); frameSrc = null; }
   if (frameGray) { frameGray.delete(); frameGray = null; }
   if (frameKeypoints) { frameKeypoints.delete(); frameKeypoints = null; }
