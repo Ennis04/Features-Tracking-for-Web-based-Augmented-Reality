@@ -1,0 +1,11 @@
+Model Information:
+* title:	Cubiod
+* source:	https://sketchfab.com/3d-models/cubiod-13b20d6a3de741da9dc0097930059170
+* author:	fulton22 (https://sketchfab.com/fulton22)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Cubiod" (https://sketchfab.com/3d-models/cubiod-13b20d6a3de741da9dc0097930059170) by fulton22 (https://sketchfab.com/fulton22) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

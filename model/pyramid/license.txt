@@ -1,0 +1,11 @@
+Model Information:
+* title:	Pyramid Refrence
+* source:	https://sketchfab.com/3d-models/pyramid-refrence-2dd7791c31b84dbabd82c5eda4e938ef
+* author:	ryad_raba (https://sketchfab.com/ryad_raba)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Pyramid Refrence" (https://sketchfab.com/3d-models/pyramid-refrence-2dd7791c31b84dbabd82c5eda4e938ef) by ryad_raba (https://sketchfab.com/ryad_raba) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
