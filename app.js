@@ -24,9 +24,7 @@ const MATCH_MAX_DISTANCE = 75;
 const MIN_MATCH_COUNT = 8;
 const MIN_INLIER_COUNT = 6;
 
-const CUBOID_MODEL_PATH = "model/jett_knife/scene.gltf";
-const OMEN_MODEL_PATH = "model/omen/scene.gltf";
-const ANYA_MODEL_PATH = "model/anya/scene.gltf";
+const MODEL_PATH = "model/jett_knife/scene.gltf";
 
 const MAX_LOST_FRAMES = 4;
 
@@ -474,7 +472,7 @@ generateBtn.addEventListener("click", function () {
   enableGeneratedButtons();
 
   setStatus(
-    `Feature analysis completed successfully. ${targetFeatures.keypoints.length} keypoints extracted. Cuboid model is ready for AR.`
+    `Feature analysis completed successfully. ${targetFeatures.keypoints.length} keypoints extracted. Model is ready for AR.`
   );
 });
 
@@ -519,10 +517,10 @@ startArBtn.addEventListener("click", async function () {
     await ensureThreeLoaded();
     setupThreeScene();
     resizeThreeScene();
-    await loadCuboidModel();
+    await loadModel();
 
     startArProcessingLoop();
-    setStatus("AR view started with cuboid model.");
+    setStatus("AR view started with model.");
   } catch (error) {
     console.error("Start AR failed:", error);
     setStatus(`Start AR failed: ${error.name || "Error"} - ${error.message || ""}`);
@@ -1056,7 +1054,7 @@ function resizeThreeScene() {
   arCamera3D.updateProjectionMatrix();
 }
 
-async function loadCuboidModel() {
+async function loadModel() {
   if (!trackedObjectRoot || !gltfLoader) return;
 
   while (trackedObjectRoot.children.length > 0) {
@@ -1065,7 +1063,7 @@ async function loadCuboidModel() {
 
   activeModel = null;
 
-  const gltf = await gltfLoader.loadAsync(CUBOID_MODEL_PATH);
+  const gltf = await gltfLoader.loadAsync(MODEL_PATH);
   activeModel = gltf.scene;
 
   const THREE = THREE_MODULE;
