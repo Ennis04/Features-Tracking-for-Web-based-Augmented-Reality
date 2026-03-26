@@ -16,7 +16,7 @@ const arStatusMessage = document.getElementById("ar-status-message");
 const arOverlay = document.getElementById("ar-overlay");
 const threeCanvas = document.getElementById("three-canvas");
 
-const SHOW_ALL_FRAME_KEYPOINTS = true;
+const SHOW_TRACKING_OVERLAY = false; // true = show green frame + blue dots + red keypoints, false = hide all
 const FRAME_PROCESS_INTERVAL = 60;
 const FRAME_MAX_WIDTH = 640;
 
@@ -24,7 +24,10 @@ const MATCH_MAX_DISTANCE = 75;
 const MIN_MATCH_COUNT = 8;
 const MIN_INLIER_COUNT = 6;
 
-const CUBOID_MODEL_PATH = "model/cuboid/scene.gltf";
+const CUBOID_MODEL_PATH = "model/jett_knife/scene.gltf";
+const OMEN_MODEL_PATH = "model/omen/scene.gltf";
+const ANYA_MODEL_PATH = "model/anya/scene.gltf";
+
 const MAX_LOST_FRAMES = 4;
 
 const frameCanvas = document.createElement("canvas");
@@ -913,22 +916,23 @@ function drawArOverlay() {
   const ctx = arOverlay.getContext("2d");
   ctx.clearRect(0, 0, arOverlay.width, arOverlay.height);
 
+  if (!SHOW_TRACKING_OVERLAY) return;
   if (!latestFrameFeatures) return;
 
   const scaleX = arOverlay.width / latestFrameFeatures.width;
   const scaleY = arOverlay.height / latestFrameFeatures.height;
 
-  if (SHOW_ALL_FRAME_KEYPOINTS) {
-    ctx.fillStyle = "rgba(255, 80, 80, 0.9)";
-    for (const kp of latestFrameFeatures.keypoints) {
-      ctx.beginPath();
-      ctx.arc(kp.x * scaleX, kp.y * scaleY, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
+  // Red frame keypoints
+  ctx.fillStyle = "rgba(255, 80, 80, 0.9)";
+  for (const kp of latestFrameFeatures.keypoints) {
+    ctx.beginPath();
+    ctx.arc(kp.x * scaleX, kp.y * scaleY, 2.5, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   if (!latestTrackingResult) return;
 
+  // Blue matched inlier points
   if (latestTrackingResult.inlierMatches.length > 0) {
     ctx.strokeStyle = "rgba(0, 255, 255, 0.9)";
     ctx.lineWidth = 2;
@@ -940,6 +944,7 @@ function drawArOverlay() {
     }
   }
 
+  // Green tracked frame
   if (latestTrackingResult.found && latestTrackingResult.projectedCorners) {
     const corners = latestTrackingResult.projectedCorners.map((p) => ({
       x: p.x * scaleX,
@@ -1068,7 +1073,7 @@ async function loadCuboidModel() {
   const center = box.getCenter(new THREE.Vector3());
   activeModel.position.sub(center);
   activeModel.scale.set(0.4, 0.4, 0.4);
-  activeModel.rotation.set(0, 0, 0);
+  activeModel.rotation.set(0, 0, Math.PI / 2);
 
   trackedObjectRoot.add(activeModel);
 }
@@ -1088,14 +1093,14 @@ function updateTracked3DObject(trackingResult) {
       y: (corners[0].y + corners[1].y + corners[2].y + corners[3].y) / 4
     };
 
-    const ndcX = (center.x / latestFrameFeatures.width) * 2 - 1;
-    const ndcY = -(center.y / latestFrameFeatures.height) * 2 + 2;
+    const ndcX = (center.x / latestFrameFeatures.width) * 2 - 0.8;
+    const ndcY = -(center.y / latestFrameFeatures.height) * 2 + 1;
 
     const worldPos = new THREE.Vector3(ndcX, ndcY, 0).unproject(arCamera3D);
 
     trackedObjectRoot.visible = true;
     trackedObjectRoot.position.copy(worldPos);
-    trackedObjectRoot.scale.setScalar(0.4);
+    trackedObjectRoot.scale.setScalar(0.075);
     trackedObjectRoot.rotation.set(0, 0, 0);
     return;
   }
@@ -1112,14 +1117,14 @@ function updateTracked3DObject(trackingResult) {
     const centerX = sumX / trackingResult.rawMatches.length;
     const centerY = sumY / trackingResult.rawMatches.length;
 
-    const ndcX = (centerX / latestFrameFeatures.width) * 2 - 1;
-    const ndcY = -(centerY / latestFrameFeatures.height) * 2 + 2;
+    const ndcX = (centerX / latestFrameFeatures.width) * 2 - 0.8;
+    const ndcY = -(centerY / latestFrameFeatures.height) * 2 + 1;
 
     const worldPos = new THREE.Vector3(ndcX, ndcY, 0).unproject(arCamera3D);
 
     trackedObjectRoot.visible = true;
     trackedObjectRoot.position.copy(worldPos);
-    trackedObjectRoot.scale.setScalar(0.4);
+    trackedObjectRoot.scale.setScalar(0.075);
     trackedObjectRoot.rotation.set(0, 0, 0);
     return;
   }
@@ -1129,5 +1134,11 @@ function updateTracked3DObject(trackingResult) {
 
 function renderThreeScene() {
   if (!renderer || !scene || !arCamera3D) return;
+
+  // rotate around X axis continuously
+  if (activeModel) {
+    activeModel.rotation.y += 0.04; // speed (adjust this)
+  }
+
   renderer.render(scene, arCamera3D);
 }

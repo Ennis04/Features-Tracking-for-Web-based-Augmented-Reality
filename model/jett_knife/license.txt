@@ -1,0 +1,11 @@
+Model Information:
+* title:	Jett Knife
+* source:	https://sketchfab.com/3d-models/jett-knife-653d3f30cdfb47f286ff4f207f634896
+* author:	crumhirnd (https://sketchfab.com/crumhirnd)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Jett Knife" (https://sketchfab.com/3d-models/jett-knife-653d3f30cdfb47f286ff4f207f634896) by crumhirnd (https://sketchfab.com/crumhirnd) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
