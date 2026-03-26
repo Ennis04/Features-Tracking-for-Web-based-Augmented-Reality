@@ -5,13 +5,9 @@ const previewPlaceholder = document.getElementById("preview-placeholder");
 const fileNameText = document.getElementById("file-name");
 const actionButtons = document.getElementById("action-buttons");
 const generateBtn = document.getElementById("generate-btn");
-const saveBtn = document.getElementById("save-btn");
-const linkModelBtn = document.getElementById("link-model-btn");
 const startArBtn = document.getElementById("start-ar-btn");
+const saveBtn = document.getElementById("save-btn");
 const statusMessage = document.getElementById("status-message");
-
-const modelPanel = document.getElementById("model-panel");
-const modelSelect = document.getElementById("model-select");
 
 const arView = document.getElementById("ar-view");
 const arVideo = document.getElementById("ar-video");
@@ -21,21 +17,15 @@ const arOverlay = document.getElementById("ar-overlay");
 const threeCanvas = document.getElementById("three-canvas");
 
 const SHOW_ALL_FRAME_KEYPOINTS = true;
-const FRAME_PROCESS_INTERVAL = 120;
+const FRAME_PROCESS_INTERVAL = 60;
 const FRAME_MAX_WIDTH = 640;
 
 const MATCH_MAX_DISTANCE = 75;
 const MIN_MATCH_COUNT = 8;
 const MIN_INLIER_COUNT = 6;
-const MATCH_DISTANCE_THRESHOLD = 22;
-const MATCH_RATIO_THRESHOLD = 0.9;
 
-const MODEL_PATHS = {
-  sphere: "model/sphere/scene.gltf",
-  cube: "model/cube/scene.gltf",
-  pyramid: "model/pyramid/scene.gltf",
-  cuboid: "model/cuboid/scene.gltf"
-};
+const CUBOID_MODEL_PATH = "model/cuboid/scene.gltf";
+const MAX_LOST_FRAMES = 4;
 
 const frameCanvas = document.createElement("canvas");
 const frameCtx = frameCanvas.getContext("2d", { willReadFrequently: true });
@@ -43,36 +33,29 @@ const frameCtx = frameCanvas.getContext("2d", { willReadFrequently: true });
 let THREE_MODULE = null;
 let GLTFLoaderClass = null;
 
-let isGenerated = false;
 let uploadedImageData = "";
-let selectedModel = "";
 let originalImage = new Image();
 let webcamStream = null;
 let targetFeatures = null;
+let isGenerated = false;
 
 let arLoopId = null;
 let isArRunning = false;
 let lastFrameProcessTime = 0;
 let latestFrameFeatures = null;
 let latestTrackingResult = null;
+let lastGoodTrackingResult = null;
+let lostFrameCount = 0;
 
 let renderer = null;
 let scene = null;
 let arCamera3D = null;
-let ambientLight = null;
-let directionalLight = null;
 let trackedObjectRoot = null;
 let activeModel = null;
 let gltfLoader = null;
 
-let smoothedPosition = null;
-
-let lastGoodTrackingResult = null;
-let lostFrameCount = 0;
-const MAX_LOST_FRAMES = 8;
-
 /* ---------------------------
-   FRIEND-STYLE TRACKER CORE
+   TRACKER CORE
 ---------------------------- */
 
 class CustomTracker {
@@ -109,7 +92,6 @@ class CustomTracker {
       for (let x = 4; x < width - 4; x += 2) {
         const center = data[y * width + x];
 
-        // quick reject using 4 points
         let quick = 0;
         const quickPts = [0, 4, 8, 12];
         for (const idx of quickPts) {
@@ -200,7 +182,7 @@ class CustomTracker {
   static popcnt8(v) {
     v = v - ((v >> 1) & 0x55);
     v = (v & 0x33) + ((v >> 2) & 0x33);
-    return (((v + (v >> 4)) & 0x0f) * 0x01);
+    return ((v + (v >> 4)) & 0x0f) * 0x01;
   }
 
   static hammingPacked(a, b) {
@@ -240,7 +222,7 @@ class CustomTracker {
         const bv = data[by * width + bx];
 
         if (av < bv) {
-          bytes[i >> 3] |= (1 << (i & 7));
+          bytes[i >> 3] |= 1 << (i & 7);
         }
       }
 
@@ -324,7 +306,6 @@ class CustomTracker {
 
     let bestModel = null;
     let bestInliers = [];
-
     const iterations = Math.min(250, matches.length * 20);
 
     for (let iter = 0; iter < iterations; iter++) {
@@ -373,7 +354,6 @@ class CustomTracker {
       return null;
     }
 
-    // refine from inliers
     let sumScale = 0;
     let sumAngle = 0;
     let sumTx = 0;
@@ -455,15 +435,12 @@ imageUpload.addEventListener("change", function () {
       actionButtons.classList.remove("hidden");
 
       isGenerated = false;
-      selectedModel = "";
       targetFeatures = null;
+      disableGeneratedButtons();
 
-      modelPanel.classList.add("hidden");
-      disableActionButtons();
-      disableStartArButton();
-
-      statusMessage.textContent =
-        "Image uploaded successfully. The original image is shown in preview. Click Generate to extract target features.";
+      setStatus(
+        "Image uploaded successfully. The original image is shown in preview. Click Generate to extract target features."
+      );
     };
 
     originalImage.src = uploadedImageData;
@@ -474,7 +451,7 @@ imageUpload.addEventListener("change", function () {
 
 generateBtn.addEventListener("click", function () {
   if (!uploadedImageData) {
-    statusMessage.textContent = "Please upload an image first.";
+    setStatus("Please upload an image first.");
     return;
   }
 
@@ -482,56 +459,32 @@ generateBtn.addEventListener("click", function () {
 
   if (!targetFeatures || targetFeatures.keypoints.length === 0) {
     isGenerated = false;
-    disableActionButtons();
-    disableStartArButton();
-    modelPanel.classList.add("hidden");
-    statusMessage.textContent =
-      "No stable feature points were found. Try another image with more texture or contrast.";
+    targetFeatures = null;
+    disableGeneratedButtons();
+    setStatus("No stable feature points were found. Try another image with more texture or contrast.");
     return;
   }
 
   drawFeaturePreview(targetFeatures);
 
   isGenerated = true;
-  enableActionButtons();
+  enableGeneratedButtons();
 
-  statusMessage.textContent =
-    `Feature analysis completed successfully. ${targetFeatures.keypoints.length} keypoints extracted.`;
-});
-
-linkModelBtn.addEventListener("click", function () {
-  if (!isGenerated || !targetFeatures) {
-    statusMessage.textContent = "Please click Generate before selecting a 3D model.";
-    return;
-  }
-
-  modelPanel.classList.remove("hidden");
-  statusMessage.textContent = "Please choose one of the predefined 3D model options.";
-});
-
-modelSelect.addEventListener("change", function () {
-  selectedModel = this.value;
-
-  if (!selectedModel) {
-    disableStartArButton();
-    statusMessage.textContent = "No 3D model selected.";
-    return;
-  }
-
-  enableStartArButton();
-  statusMessage.textContent = `3D model selected: ${selectedModel}. Start AR is now enabled.`;
+  setStatus(
+    `Feature analysis completed successfully. ${targetFeatures.keypoints.length} keypoints extracted. Cuboid model is ready for AR.`
+  );
 });
 
 startArBtn.addEventListener("click", async function () {
   if (startArBtn.disabled) return;
 
   if (!targetFeatures || targetFeatures.keypoints.length === 0) {
-    statusMessage.textContent = "Please generate target features before starting AR.";
+    setStatus("Please generate target features before starting AR.");
     return;
   }
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    statusMessage.textContent = "This browser does not support webcam access.";
+    setStatus("This browser does not support webcam access.");
     return;
   }
 
@@ -560,31 +513,17 @@ startArBtn.addEventListener("click", async function () {
     await arVideo.play();
     setupArOverlay();
 
-    try {
-      await ensureThreeLoaded();
-      setupThreeScene();
-      resizeThreeScene();
-    } catch (threeError) {
-      console.error("Three.js setup failed:", threeError);
-      statusMessage.textContent = `Camera started, but 3D setup failed: ${threeError.message}`;
-      return;
-    }
-
-    try {
-      if (selectedModel) {
-        await loadSelectedModel(selectedModel);
-      }
-    } catch (modelError) {
-      console.error("Model load failed:", modelError);
-      statusMessage.textContent = `Camera started, but model loading failed: ${modelError.message}`;
-      return;
-    }
+    await ensureThreeLoaded();
+    setupThreeScene();
+    resizeThreeScene();
+    await loadCuboidModel();
 
     startArProcessingLoop();
-    statusMessage.textContent = `AR view started with model: ${selectedModel}.`;
+    setStatus("AR view started with cuboid model.");
   } catch (error) {
     console.error("Start AR failed:", error);
-    statusMessage.textContent = `Start AR failed: ${error.name || "Error"} - ${error.message || ""}`;
+    setStatus(`Start AR failed: ${error.name || "Error"} - ${error.message || ""}`);
+    closeArView();
   }
 });
 
@@ -594,7 +533,7 @@ backBtn.addEventListener("click", function () {
 
 saveBtn.addEventListener("click", function () {
   if (!isGenerated) {
-    statusMessage.textContent = "Save is disabled until Generate is clicked.";
+    setStatus("Save is disabled until Generate is clicked.");
     return;
   }
 
@@ -605,7 +544,7 @@ saveBtn.addEventListener("click", function () {
   link.click();
   document.body.removeChild(link);
 
-  statusMessage.textContent = "Generated image saved to your local device.";
+  setStatus("Generated image saved to your local device.");
 });
 
 /* ---------------------------
@@ -625,30 +564,25 @@ function showCanvasPreview() {
   previewCanvas.style.display = "block";
 }
 
-function disableActionButtons() {
+function disableGeneratedButtons() {
   saveBtn.disabled = true;
   saveBtn.classList.add("btn-disabled");
 
-  linkModelBtn.disabled = true;
-  linkModelBtn.classList.add("btn-disabled");
-}
-
-function enableActionButtons() {
-  saveBtn.disabled = false;
-  saveBtn.classList.remove("btn-disabled");
-
-  linkModelBtn.disabled = false;
-  linkModelBtn.classList.remove("btn-disabled");
-}
-
-function disableStartArButton() {
   startArBtn.disabled = true;
   startArBtn.classList.add("btn-disabled");
 }
 
-function enableStartArButton() {
+function enableGeneratedButtons() {
+  saveBtn.disabled = false;
+  saveBtn.classList.remove("btn-disabled");
+
   startArBtn.disabled = false;
   startArBtn.classList.remove("btn-disabled");
+}
+
+function setStatus(message) {
+  statusMessage.textContent = message;
+  arStatusMessage.textContent = message;
 }
 
 function closeArView() {
@@ -672,21 +606,15 @@ function closeArView() {
     renderer = null;
   }
 
-  smoothedPosition = null;
   scene = null;
   arCamera3D = null;
+  trackedObjectRoot = null;
   activeModel = null;
   gltfLoader = null;
-}
-
-function setStatus(message) {
-  if (statusMessage) {
-    statusMessage.textContent = message;
-  }
-
-  if (arStatusMessage) {
-    arStatusMessage.textContent = message;
-  }
+  latestFrameFeatures = null;
+  latestTrackingResult = null;
+  lastGoodTrackingResult = null;
+  lostFrameCount = 0;
 }
 
 function resetPreview() {
@@ -702,17 +630,9 @@ function resetPreview() {
   statusMessage.textContent = "";
   uploadedImageData = "";
   isGenerated = false;
-  selectedModel = "";
   targetFeatures = null;
 
-  if (modelSelect) {
-    modelSelect.value = "";
-  }
-
-  modelPanel.classList.add("hidden");
-
-  disableActionButtons();
-  disableStartArButton();
+  disableGeneratedButtons();
 }
 
 function setupArOverlay() {
@@ -831,9 +751,9 @@ function drawFeaturePreview(featureData) {
    TRACKING
 ---------------------------- */
 
-function trackTargetInFrame(targetFeatures, frameFeatures) {
+function trackTargetInFrame(targetFeaturesData, frameFeatures) {
   const rawMatches = CustomTracker.matchFeatures(
-    targetFeatures.descriptors,
+    targetFeaturesData.descriptors,
     frameFeatures.descriptors,
     MATCH_MAX_DISTANCE
   );
@@ -849,17 +769,17 @@ function trackTargetInFrame(targetFeatures, frameFeatures) {
   }
 
   const model = CustomTracker.solveAffineRansac(
-    targetFeatures.keypoints,
+    targetFeaturesData.keypoints,
     frameFeatures.keypoints,
     rawMatches,
-    targetFeatures.cx,
-    targetFeatures.cy
+    targetFeaturesData.cx,
+    targetFeaturesData.cy
   );
 
   if (!model || !model.inliers || model.inliers.length < MIN_INLIER_COUNT) {
     return {
       found: false,
-      rawMatches: mapMatchesForOverlay(rawMatches, targetFeatures.keypoints, frameFeatures.keypoints),
+      rawMatches: mapMatchesForOverlay(rawMatches, targetFeaturesData.keypoints, frameFeatures.keypoints),
       inlierMatches: [],
       affineModel: null,
       projectedCorners: null
@@ -867,17 +787,17 @@ function trackTargetInFrame(targetFeatures, frameFeatures) {
   }
 
   const projectedCorners = projectCornersFromAffine(
-    targetFeatures.width,
-    targetFeatures.height,
+    targetFeaturesData.width,
+    targetFeaturesData.height,
     model,
-    targetFeatures.cx,
-    targetFeatures.cy
+    targetFeaturesData.cx,
+    targetFeaturesData.cy
   );
 
   return {
     found: true,
-    rawMatches: mapMatchesForOverlay(rawMatches, targetFeatures.keypoints, frameFeatures.keypoints),
-    inlierMatches: mapMatchesForOverlay(model.inliers, targetFeatures.keypoints, frameFeatures.keypoints),
+    rawMatches: mapMatchesForOverlay(rawMatches, targetFeaturesData.keypoints, frameFeatures.keypoints),
+    inlierMatches: mapMatchesForOverlay(model.inliers, targetFeaturesData.keypoints, frameFeatures.keypoints),
     affineModel: model,
     projectedCorners
   };
@@ -929,16 +849,8 @@ function startArProcessingLoop() {
   isArRunning = true;
   lastFrameProcessTime = 0;
   latestTrackingResult = null;
-
-  if (latestTrackingResult && latestTrackingResult.found) {
-    lastGoodTrackingResult = latestTrackingResult;
-    lostFrameCount = 0;
-  } else {
-    lostFrameCount++;
-    if (lostFrameCount <= MAX_LOST_FRAMES && lastGoodTrackingResult) {
-      latestTrackingResult = lastGoodTrackingResult;
-    }
-  }
+  lastGoodTrackingResult = null;
+  lostFrameCount = 0;
 
   const loop = (timestamp) => {
     if (!isArRunning) return;
@@ -949,24 +861,33 @@ function startArProcessingLoop() {
       return;
     }
 
-    if (timestamp - lastFrameProcessTime < FRAME_PROCESS_INTERVAL) {
-      drawArOverlay();
-      renderThreeScene();
-      return;
-    }
+    if (timestamp - lastFrameProcessTime >= FRAME_PROCESS_INTERVAL) {
+      lastFrameProcessTime = timestamp;
+      latestFrameFeatures = extractFrameFeaturesFromVideo(arVideo);
 
-    lastFrameProcessTime = timestamp;
-    latestFrameFeatures = extractFrameFeaturesFromVideo(arVideo);
+      if (targetFeatures && latestFrameFeatures) {
+        const currentResult = trackTargetInFrame(targetFeatures, latestFrameFeatures);
 
-    if (targetFeatures && latestFrameFeatures) {
-      latestTrackingResult = trackTargetInFrame(targetFeatures, latestFrameFeatures);
-    } else {
-      latestTrackingResult = null;
+        if (currentResult.found) {
+          latestTrackingResult = currentResult;
+          lastGoodTrackingResult = currentResult;
+          lostFrameCount = 0;
+        } else if (lastGoodTrackingResult && lostFrameCount < MAX_LOST_FRAMES) {
+          lostFrameCount++;
+          latestTrackingResult = lastGoodTrackingResult;
+        } else {
+          latestTrackingResult = currentResult;
+          lostFrameCount = MAX_LOST_FRAMES;
+        }
+      } else {
+        latestTrackingResult = null;
+      }
+
+      updateTrackingStatus(latestFrameFeatures, latestTrackingResult);
+      updateTracked3DObject(latestTrackingResult);
     }
 
     drawArOverlay();
-    updateTrackingStatus(latestFrameFeatures, latestTrackingResult);
-    updateTracked3DObject(latestTrackingResult);
     renderThreeScene();
   };
 
@@ -1000,10 +921,8 @@ function drawArOverlay() {
   if (SHOW_ALL_FRAME_KEYPOINTS) {
     ctx.fillStyle = "rgba(255, 80, 80, 0.9)";
     for (const kp of latestFrameFeatures.keypoints) {
-      const x = kp.x * scaleX;
-      const y = kp.y * scaleY;
       ctx.beginPath();
-      ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+      ctx.arc(kp.x * scaleX, kp.y * scaleY, 2.5, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -1015,11 +934,8 @@ function drawArOverlay() {
     ctx.lineWidth = 2;
 
     for (const match of latestTrackingResult.inlierMatches) {
-      const x = match.framePoint.x * scaleX;
-      const y = match.framePoint.y * scaleY;
-
       ctx.beginPath();
-      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.arc(match.framePoint.x * scaleX, match.framePoint.y * scaleY, 4, 0, Math.PI * 2);
       ctx.stroke();
     }
   }
@@ -1110,10 +1026,10 @@ function setupThreeScene() {
   );
   arCamera3D.position.z = 2;
 
-  ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
   scene.add(ambientLight);
 
-  directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
   directionalLight.position.set(1, 2, 3);
   scene.add(directionalLight);
 
@@ -1135,8 +1051,8 @@ function resizeThreeScene() {
   arCamera3D.updateProjectionMatrix();
 }
 
-async function loadSelectedModel(modelKey) {
-  if (!trackedObjectRoot) return;
+async function loadCuboidModel() {
+  if (!trackedObjectRoot || !gltfLoader) return;
 
   while (trackedObjectRoot.children.length > 0) {
     trackedObjectRoot.remove(trackedObjectRoot.children[0]);
@@ -1144,18 +1060,13 @@ async function loadSelectedModel(modelKey) {
 
   activeModel = null;
 
-  const modelPath = MODEL_PATHS[modelKey];
-  if (!modelPath) return;
-
-  const gltf = await gltfLoader.loadAsync(modelPath);
+  const gltf = await gltfLoader.loadAsync(CUBOID_MODEL_PATH);
   activeModel = gltf.scene;
 
   const THREE = THREE_MODULE;
   const box = new THREE.Box3().setFromObject(activeModel);
   const center = box.getCenter(new THREE.Vector3());
   activeModel.position.sub(center);
-
-  // make it MUCH bigger for debugging
   activeModel.scale.set(0.4, 0.4, 0.4);
   activeModel.rotation.set(0, 0, 0);
 
@@ -1169,8 +1080,7 @@ function updateTracked3DObject(trackingResult) {
 
   const THREE = THREE_MODULE;
 
-  // If tracking is good, place model at tracked center
-  if (trackingResult && trackingResult.found && trackingResult.projectedCorners && trackingResult.projectedCorners.length === 4) {
+  if (trackingResult && trackingResult.found && trackingResult.projectedCorners?.length === 4) {
     const corners = trackingResult.projectedCorners;
 
     const center = {
@@ -1179,21 +1089,17 @@ function updateTracked3DObject(trackingResult) {
     };
 
     const ndcX = (center.x / latestFrameFeatures.width) * 2 - 1;
-    const ndcY = -((center.y / latestFrameFeatures.height) * 2 - 1) + 1;
+    const ndcY = -(center.y / latestFrameFeatures.height) * 2 + 2;
 
-    // place a bit in front of camera
     const worldPos = new THREE.Vector3(ndcX, ndcY, 0).unproject(arCamera3D);
 
     trackedObjectRoot.visible = true;
     trackedObjectRoot.position.copy(worldPos);
-
-    // bigger scale for debugging
     trackedObjectRoot.scale.setScalar(0.4);
     trackedObjectRoot.rotation.set(0, 0, 0);
     return;
   }
 
-  // fallback: still show model using raw matches if available
   if (trackingResult && trackingResult.rawMatches && trackingResult.rawMatches.length >= 3) {
     let sumX = 0;
     let sumY = 0;
@@ -1207,7 +1113,7 @@ function updateTracked3DObject(trackingResult) {
     const centerY = sumY / trackingResult.rawMatches.length;
 
     const ndcX = (centerX / latestFrameFeatures.width) * 2 - 1;
-    const ndcY = -((centerY / latestFrameFeatures.height) * 2 - 1) + 1;
+    const ndcY = -(centerY / latestFrameFeatures.height) * 2 + 2;
 
     const worldPos = new THREE.Vector3(ndcX, ndcY, 0).unproject(arCamera3D);
 
