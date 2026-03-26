@@ -1,7 +1,12 @@
 const imageUpload = document.getElementById("image-upload");
 const imagePreview = document.getElementById("image-preview");
-const previewCanvas = document.getElementById("preview-canvas");
-const previewPlaceholder = document.getElementById("preview-placeholder");
+const grayscaleCanvas = document.getElementById("grayscale-canvas");
+const featureCanvas = document.getElementById("feature-canvas");
+
+const originalPlaceholder = document.getElementById("original-placeholder");
+const grayscalePlaceholder = document.getElementById("grayscale-placeholder");
+const featurePlaceholder = document.getElementById("feature-placeholder");
+
 const fileNameText = document.getElementById("file-name");
 const actionButtons = document.getElementById("action-buttons");
 const generateBtn = document.getElementById("generate-btn");
@@ -16,7 +21,7 @@ const arStatusMessage = document.getElementById("ar-status-message");
 const arOverlay = document.getElementById("ar-overlay");
 const threeCanvas = document.getElementById("three-canvas");
 
-const SHOW_TRACKING_OVERLAY = false; // true = show green frame + blue dots + red keypoints, false = hide all
+const SHOW_TRACKING_OVERLAY = false;
 const FRAME_PROCESS_INTERVAL = 60;
 const FRAME_MAX_WIDTH = 640;
 
@@ -25,7 +30,6 @@ const MIN_MATCH_COUNT = 8;
 const MIN_INLIER_COUNT = 6;
 
 const MODEL_PATH = "model/jett_knife/scene.gltf";
-
 const MAX_LOST_FRAMES = 4;
 
 const frameCanvas = document.createElement("canvas");
@@ -433,6 +437,7 @@ imageUpload.addEventListener("change", function () {
 
     originalImage.onload = function () {
       showOriginalPreview();
+      clearGeneratedPreviews();
       actionButtons.classList.remove("hidden");
 
       isGenerated = false;
@@ -462,6 +467,7 @@ generateBtn.addEventListener("click", function () {
     isGenerated = false;
     targetFeatures = null;
     disableGeneratedButtons();
+    clearGeneratedPreviews();
     setStatus("No stable feature points were found. Try another image with more texture or contrast.");
     return;
   }
@@ -539,7 +545,7 @@ saveBtn.addEventListener("click", function () {
   }
 
   const link = document.createElement("a");
-  link.href = previewCanvas.toDataURL("image/png");
+  link.href = featureCanvas.toDataURL("image/png");
   link.download = "feature-analysis-result.png";
   document.body.appendChild(link);
   link.click();
@@ -553,16 +559,33 @@ saveBtn.addEventListener("click", function () {
 ---------------------------- */
 
 function showOriginalPreview() {
-  previewPlaceholder.style.display = "none";
-  previewCanvas.style.display = "none";
+  originalPlaceholder.style.display = "none";
   imagePreview.style.display = "block";
   imagePreview.src = uploadedImageData;
 }
 
-function showCanvasPreview() {
-  previewPlaceholder.style.display = "none";
-  imagePreview.style.display = "none";
-  previewCanvas.style.display = "block";
+function showGrayscalePreview() {
+  grayscalePlaceholder.style.display = "none";
+  grayscaleCanvas.style.display = "block";
+}
+
+function showFeaturePreview() {
+  featurePlaceholder.style.display = "none";
+  featureCanvas.style.display = "block";
+}
+
+function clearGeneratedPreviews() {
+  grayscaleCanvas.style.display = "none";
+  featureCanvas.style.display = "none";
+
+  grayscalePlaceholder.style.display = "block";
+  featurePlaceholder.style.display = "block";
+
+  const gctx = grayscaleCanvas.getContext("2d");
+  const fctx = featureCanvas.getContext("2d");
+
+  gctx.clearRect(0, 0, grayscaleCanvas.width || 1, grayscaleCanvas.height || 1);
+  fctx.clearRect(0, 0, featureCanvas.width || 1, featureCanvas.height || 1);
 }
 
 function disableGeneratedButtons() {
@@ -623,8 +646,9 @@ function resetPreview() {
 
   imagePreview.src = "";
   imagePreview.style.display = "none";
-  previewCanvas.style.display = "none";
-  previewPlaceholder.style.display = "block";
+
+  originalPlaceholder.style.display = "block";
+  clearGeneratedPreviews();
 
   fileNameText.textContent = "No file selected";
   actionButtons.classList.add("hidden");
@@ -721,12 +745,39 @@ function extractFrameFeaturesFromVideo(video) {
 
 function drawFeaturePreview(featureData) {
   const { width, height, gray, keypoints } = featureData;
-  const ctx = previewCanvas.getContext("2d");
+  drawGrayscalePreview(width, height, gray);
+  drawFeaturePointsPreview(width, height, gray, keypoints);
+}
 
-  previewCanvas.width = width;
-  previewCanvas.height = height;
+function drawGrayscalePreview(width, height, gray) {
+  const ctx = grayscaleCanvas.getContext("2d");
+
+  grayscaleCanvas.width = width;
+  grayscaleCanvas.height = height;
 
   const imageData = ctx.createImageData(width, height);
+
+  for (let i = 0; i < gray.data.length; i++) {
+    const v = gray.data[i];
+    const base = i * 4;
+    imageData.data[base] = v;
+    imageData.data[base + 1] = v;
+    imageData.data[base + 2] = v;
+    imageData.data[base + 3] = 255;
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  showGrayscalePreview();
+}
+
+function drawFeaturePointsPreview(width, height, gray, keypoints) {
+  const ctx = featureCanvas.getContext("2d");
+
+  featureCanvas.width = width;
+  featureCanvas.height = height;
+
+  const imageData = ctx.createImageData(width, height);
+
   for (let i = 0; i < gray.data.length; i++) {
     const v = gray.data[i];
     const base = i * 4;
@@ -745,7 +796,7 @@ function drawFeaturePreview(featureData) {
     ctx.fill();
   }
 
-  showCanvasPreview();
+  showFeaturePreview();
 }
 
 /* ---------------------------
@@ -920,7 +971,6 @@ function drawArOverlay() {
   const scaleX = arOverlay.width / latestFrameFeatures.width;
   const scaleY = arOverlay.height / latestFrameFeatures.height;
 
-  // Red frame keypoints
   ctx.fillStyle = "rgba(255, 80, 80, 0.9)";
   for (const kp of latestFrameFeatures.keypoints) {
     ctx.beginPath();
@@ -930,7 +980,6 @@ function drawArOverlay() {
 
   if (!latestTrackingResult) return;
 
-  // Blue matched inlier points
   if (latestTrackingResult.inlierMatches.length > 0) {
     ctx.strokeStyle = "rgba(0, 255, 255, 0.9)";
     ctx.lineWidth = 2;
@@ -942,7 +991,6 @@ function drawArOverlay() {
     }
   }
 
-  // Green tracked frame
   if (latestTrackingResult.found && latestTrackingResult.projectedCorners) {
     const corners = latestTrackingResult.projectedCorners.map((p) => ({
       x: p.x * scaleX,
@@ -1133,9 +1181,8 @@ function updateTracked3DObject(trackingResult) {
 function renderThreeScene() {
   if (!renderer || !scene || !arCamera3D) return;
 
-  // rotate around X axis continuously
   if (activeModel) {
-    activeModel.rotation.y += 0.04; // speed (adjust this)
+    activeModel.rotation.y += 0.04;
   }
 
   renderer.render(scene, arCamera3D);

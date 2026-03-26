@@ -34,10 +34,30 @@
       <section class="card preview-card">
         <h2>Preview</h2>
 
-        <div id="preview-box" class="preview-box">
-          <span id="preview-placeholder" class="preview-placeholder">Preview</span>
-          <img id="image-preview" src="" alt="Image Preview" />
-          <canvas id="preview-canvas"></canvas>
+        <div class="preview-grid">
+          <div class="preview-panel">
+            <h3>Original</h3>
+            <div class="preview-box">
+              <span id="original-placeholder" class="preview-placeholder">Original image</span>
+              <img id="image-preview" src="" alt="Original Image Preview" />
+            </div>
+          </div>
+
+          <div class="preview-panel">
+            <h3>Greyscale</h3>
+            <div class="preview-box">
+              <span id="grayscale-placeholder" class="preview-placeholder">Greyscale image</span>
+              <canvas id="grayscale-canvas"></canvas>
+            </div>
+          </div>
+
+          <div class="preview-panel">
+            <h3>Feature Output</h3>
+            <div class="preview-box">
+              <span id="feature-placeholder" class="preview-placeholder">Feature-created image</span>
+              <canvas id="feature-canvas"></canvas>
+            </div>
+          </div>
         </div>
 
         <div id="action-buttons" class="button-group hidden">
