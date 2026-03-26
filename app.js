@@ -22,11 +22,11 @@ const threeCanvas = document.getElementById("three-canvas");
 
 const SHOW_ALL_FRAME_KEYPOINTS = true;
 const FRAME_PROCESS_INTERVAL = 120;
-const FRAME_MAX_WIDTH = 480;
+const FRAME_MAX_WIDTH = 640;
 
-const MATCH_MAX_DISTANCE = 95;
-const MIN_MATCH_COUNT = 4;
-const MIN_INLIER_COUNT = 3;
+const MATCH_MAX_DISTANCE = 75;
+const MIN_MATCH_COUNT = 8;
+const MIN_INLIER_COUNT = 6;
 const MATCH_DISTANCE_THRESHOLD = 22;
 const MATCH_RATIO_THRESHOLD = 0.9;
 
@@ -66,6 +66,10 @@ let activeModel = null;
 let gltfLoader = null;
 
 let smoothedPosition = null;
+
+let lastGoodTrackingResult = null;
+let lostFrameCount = 0;
+const MAX_LOST_FRAMES = 8;
 
 /* ---------------------------
    FRIEND-STYLE TRACKER CORE
@@ -250,7 +254,7 @@ class CustomTracker {
     };
   }
 
-  static matchFeatures(descA, descB, maxDistance = 110, ratio = 0.9) {
+  static matchFeatures(descA, descB, maxDistance = 75, ratio = 0.7) {
     const matches = [];
 
     for (let i = 0; i < descA.length; i++) {
@@ -354,7 +358,7 @@ class CustomTracker {
         const py = model.scale * (lx * sinA + ly * cosA) + model.ty;
 
         const err = Math.hypot(px - q.x, py - q.y);
-        if (err < 20) {
+        if (err < 10) {
           inliers.push(m);
         }
       }
@@ -782,7 +786,7 @@ function extractFrameFeaturesFromVideo(video) {
 
   const imageData = frameCtx.getImageData(0, 0, width, height);
   const grayImg = CustomTracker.getGrayscale(imageData);
-  const keypoints = CustomTracker.detectFAST(grayImg, 35);
+  const keypoints = CustomTracker.detectFAST(grayImg, 25);
   const brief = CustomTracker.computeBRIEF(grayImg, keypoints);
 
   return {
@@ -925,6 +929,16 @@ function startArProcessingLoop() {
   isArRunning = true;
   lastFrameProcessTime = 0;
   latestTrackingResult = null;
+
+  if (latestTrackingResult && latestTrackingResult.found) {
+    lastGoodTrackingResult = latestTrackingResult;
+    lostFrameCount = 0;
+  } else {
+    lostFrameCount++;
+    if (lostFrameCount <= MAX_LOST_FRAMES && lastGoodTrackingResult) {
+      latestTrackingResult = lastGoodTrackingResult;
+    }
+  }
 
   const loop = (timestamp) => {
     if (!isArRunning) return;
@@ -1165,7 +1179,7 @@ function updateTracked3DObject(trackingResult) {
     };
 
     const ndcX = (center.x / latestFrameFeatures.width) * 2 - 1;
-    const ndcY = -((center.y / latestFrameFeatures.height) * 2 - 1);
+    const ndcY = -((center.y / latestFrameFeatures.height) * 2 - 1) + 1;
 
     // place a bit in front of camera
     const worldPos = new THREE.Vector3(ndcX, ndcY, 0).unproject(arCamera3D);
@@ -1193,7 +1207,7 @@ function updateTracked3DObject(trackingResult) {
     const centerY = sumY / trackingResult.rawMatches.length;
 
     const ndcX = (centerX / latestFrameFeatures.width) * 2 - 1;
-    const ndcY = -((centerY / latestFrameFeatures.height) * 2 - 1);
+    const ndcY = -((centerY / latestFrameFeatures.height) * 2 - 1) + 1;
 
     const worldPos = new THREE.Vector3(ndcX, ndcY, 0).unproject(arCamera3D);
 
