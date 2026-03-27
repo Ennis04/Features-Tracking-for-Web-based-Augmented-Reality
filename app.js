@@ -14,6 +14,8 @@ const startArBtn = document.getElementById("start-ar-btn");
 const saveBtn = document.getElementById("save-btn");
 const statusMessage = document.getElementById("status-message");
 
+const modelSelect = document.getElementById("model-select");
+
 const arView = document.getElementById("ar-view");
 const arVideo = document.getElementById("ar-video");
 const backBtn = document.getElementById("back-btn");
@@ -29,7 +31,6 @@ const MATCH_MAX_DISTANCE = 75;
 const MIN_MATCH_COUNT = 8;
 const MIN_INLIER_COUNT = 6;
 
-const MODEL_PATH = "model/jett_knife/scene.gltf";
 const MAX_LOST_FRAMES = 4;
 
 const frameCanvas = document.createElement("canvas");
@@ -43,6 +44,8 @@ let originalImage = new Image();
 let webcamStream = null;
 let targetFeatures = null;
 let isGenerated = false;
+
+let currentModelKey = "jett_knife";
 
 let arLoopId = null;
 let isArRunning = false;
@@ -58,6 +61,65 @@ let arCamera3D = null;
 let trackedObjectRoot = null;
 let activeModel = null;
 let gltfLoader = null;
+
+/* ---------------------------
+   MODEL CONFIG
+   Tune these values yourself
+---------------------------- */
+
+const MODEL_CONFIGS = {
+  jett_knife: {
+    label: "Jett Knife",
+    path: "model/jett_knife/scene.gltf",
+
+    // local model transform
+    modelScale: [0.4, 0.4, 0.4],
+    modelRotation: [0, 0, Math.PI / 2],
+    modelPosition: [0, 0, 0],
+
+    // AR world transform
+    rootScale: 0.075,
+    rootRotation: [0, 0, 0],
+    rootPositionOffset: [0, 0, 0],
+
+    // optional animation
+    autoSpinY: 0.04
+  },
+
+  cuboid: {
+    label: "Cuboid",
+    path: "model/cuboid/scene.gltf",
+
+    modelScale: [1.5, 1.5, 1.5],
+    modelRotation: [0, 0, 0],
+    modelPosition: [0, 0, 0],
+
+    rootScale: 0.07,
+    rootRotation: [0, 0, 0],
+    rootPositionOffset: [0, 0, 0],
+
+    autoSpinY: 0.01
+  },
+
+  pyramid: {
+    label: "Pyramid",
+    path: "model/pyramid/scene.gltf",
+
+    modelScale: [0.025, 0.05, 0.025],
+    modelRotation: [0, 0, 0],
+    modelPosition: [0, 0, 0],
+
+    rootScale: 0.07,
+    rootRotation: [0, 0, 0],
+    rootPositionOffset: [0, 0, 0],
+
+    autoSpinY: 0.01
+  }
+};
+
+function getCurrentModelConfig() {
+  return MODEL_CONFIGS[currentModelKey] || MODEL_CONFIGS.jett_knife;
+}
 
 /* ---------------------------
    TRACKER CORE
@@ -455,6 +517,23 @@ imageUpload.addEventListener("change", function () {
   reader.readAsDataURL(file);
 });
 
+modelSelect.addEventListener("change", async function () {
+  currentModelKey = this.value;
+  const cfg = getCurrentModelConfig();
+
+  setStatus(`Selected 3D model: ${cfg.label}`);
+
+  if (isArRunning && trackedObjectRoot && gltfLoader) {
+    try {
+      await loadModel();
+      setStatus(`Model switched to: ${cfg.label}`);
+    } catch (error) {
+      console.error("Model switch failed:", error);
+      setStatus(`Failed to switch model: ${error.message || "Unknown error"}`);
+    }
+  }
+});
+
 generateBtn.addEventListener("click", function () {
   if (!uploadedImageData) {
     setStatus("Please upload an image first.");
@@ -526,7 +605,7 @@ startArBtn.addEventListener("click", async function () {
     await loadModel();
 
     startArProcessingLoop();
-    setStatus("AR view started with model.");
+    setStatus(`AR view started with ${getCurrentModelConfig().label}.`);
   } catch (error) {
     console.error("Start AR failed:", error);
     setStatus(`Start AR failed: ${error.name || "Error"} - ${error.message || ""}`);
@@ -656,6 +735,9 @@ function resetPreview() {
   uploadedImageData = "";
   isGenerated = false;
   targetFeatures = null;
+
+  modelSelect.value = "jett_knife";
+  currentModelKey = "jett_knife";
 
   disableGeneratedButtons();
 }
@@ -1102,24 +1184,68 @@ function resizeThreeScene() {
   arCamera3D.updateProjectionMatrix();
 }
 
-async function loadModel() {
-  if (!trackedObjectRoot || !gltfLoader) return;
+function clearTrackedObjectRoot() {
+  if (!trackedObjectRoot) return;
 
   while (trackedObjectRoot.children.length > 0) {
-    trackedObjectRoot.remove(trackedObjectRoot.children[0]);
+    const child = trackedObjectRoot.children[0];
+    trackedObjectRoot.remove(child);
+
+    if (child.traverse) {
+      child.traverse((obj) => {
+        if (obj.geometry) obj.geometry.dispose?.();
+
+        if (obj.material) {
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((mat) => mat.dispose?.());
+          } else {
+            obj.material.dispose?.();
+          }
+        }
+      });
+    }
   }
+}
 
-  activeModel = null;
-
-  const gltf = await gltfLoader.loadAsync(MODEL_PATH);
-  activeModel = gltf.scene;
+async function loadModel() {
+  if (!trackedObjectRoot || !gltfLoader || !THREE_MODULE) return;
 
   const THREE = THREE_MODULE;
+  const cfg = getCurrentModelConfig();
+
+  clearTrackedObjectRoot();
+  activeModel = null;
+
+  const gltf = await gltfLoader.loadAsync(cfg.path);
+  activeModel = gltf.scene;
+
   const box = new THREE.Box3().setFromObject(activeModel);
   const center = box.getCenter(new THREE.Vector3());
+
   activeModel.position.sub(center);
-  activeModel.scale.set(0.4, 0.4, 0.4);
-  activeModel.rotation.set(0, 0, Math.PI / 2);
+
+  activeModel.scale.set(
+    cfg.modelScale[0],
+    cfg.modelScale[1],
+    cfg.modelScale[2]
+  );
+
+  activeModel.rotation.set(
+    cfg.modelRotation[0],
+    cfg.modelRotation[1],
+    cfg.modelRotation[2]
+  );
+
+  activeModel.position.x += cfg.modelPosition[0];
+  activeModel.position.y += cfg.modelPosition[1];
+  activeModel.position.z += cfg.modelPosition[2];
+
+  trackedObjectRoot.scale.setScalar(cfg.rootScale);
+  trackedObjectRoot.rotation.set(
+    cfg.rootRotation[0],
+    cfg.rootRotation[1],
+    cfg.rootRotation[2]
+  );
 
   trackedObjectRoot.add(activeModel);
 }
@@ -1130,6 +1256,7 @@ function updateTracked3DObject(trackingResult) {
   }
 
   const THREE = THREE_MODULE;
+  const cfg = getCurrentModelConfig();
 
   if (trackingResult && trackingResult.found && trackingResult.projectedCorners?.length === 4) {
     const corners = trackingResult.projectedCorners;
@@ -1146,8 +1273,17 @@ function updateTracked3DObject(trackingResult) {
 
     trackedObjectRoot.visible = true;
     trackedObjectRoot.position.copy(worldPos);
-    trackedObjectRoot.scale.setScalar(0.075);
-    trackedObjectRoot.rotation.set(0, 0, 0);
+
+    trackedObjectRoot.position.x += cfg.rootPositionOffset[0];
+    trackedObjectRoot.position.y += cfg.rootPositionOffset[1];
+    trackedObjectRoot.position.z += cfg.rootPositionOffset[2];
+
+    trackedObjectRoot.scale.setScalar(cfg.rootScale);
+    trackedObjectRoot.rotation.set(
+      cfg.rootRotation[0],
+      cfg.rootRotation[1],
+      cfg.rootRotation[2]
+    );
     return;
   }
 
@@ -1170,8 +1306,17 @@ function updateTracked3DObject(trackingResult) {
 
     trackedObjectRoot.visible = true;
     trackedObjectRoot.position.copy(worldPos);
-    trackedObjectRoot.scale.setScalar(0.075);
-    trackedObjectRoot.rotation.set(0, 0, 0);
+
+    trackedObjectRoot.position.x += cfg.rootPositionOffset[0];
+    trackedObjectRoot.position.y += cfg.rootPositionOffset[1];
+    trackedObjectRoot.position.z += cfg.rootPositionOffset[2];
+
+    trackedObjectRoot.scale.setScalar(cfg.rootScale);
+    trackedObjectRoot.rotation.set(
+      cfg.rootRotation[0],
+      cfg.rootRotation[1],
+      cfg.rootRotation[2]
+    );
     return;
   }
 
@@ -1181,8 +1326,10 @@ function updateTracked3DObject(trackingResult) {
 function renderThreeScene() {
   if (!renderer || !scene || !arCamera3D) return;
 
-  if (activeModel) {
-    activeModel.rotation.y += 0.04;
+  const cfg = getCurrentModelConfig();
+
+  if (activeModel && cfg.autoSpinY) {
+    activeModel.rotation.y += cfg.autoSpinY;
   }
 
   renderer.render(scene, arCamera3D);
