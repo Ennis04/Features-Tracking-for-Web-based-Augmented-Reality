@@ -62,27 +62,20 @@ let trackedObjectRoot = null;
 let activeModel = null;
 let gltfLoader = null;
 
-/* ---------------------------
-   MODEL CONFIG
-   Tune these values yourself
----------------------------- */
-
+// Configuration for size and location of the 3D models
 const MODEL_CONFIGS = {
   jett_knife: {
     label: "Jett Knife",
     path: "model/jett_knife/scene.gltf",
 
-    // local model transform
     modelScale: [0.4, 0.4, 0.4],
     modelRotation: [0, 0, Math.PI / 2],
     modelPosition: [0, 0, 0],
 
-    // AR world transform
     rootScale: 0.075,
     rootRotation: [0, 0, 0],
     rootPositionOffset: [0, 0, 0],
 
-    // optional animation
     autoSpinY: 0.04
   },
 
@@ -121,13 +114,11 @@ function getCurrentModelConfig() {
   return MODEL_CONFIGS[currentModelKey] || MODEL_CONFIGS.jett_knife;
 }
 
-/* ---------------------------
-   TRACKER CORE
----------------------------- */
-
-class CustomTracker {
+// Feature detection using FAST + BRIEF
+class FeatureTracker {
   static briefPairs = null;
 
+  // Convert image into grayscale
   static getGrayscale(imageData) {
     const { width, height, data } = imageData;
     const gray = new Uint8Array(width * height);
@@ -143,6 +134,7 @@ class CustomTracker {
     return { width, height, data: gray };
   }
 
+  // Detect corners using FAST algorithm
   static detectFAST(grayImg, threshold = 35) {
     const { width, height, data } = grayImg;
     const circle = [
@@ -231,6 +223,7 @@ class CustomTracker {
     };
   }
 
+  // Generate random pairs of points for BRIEF descriptor
   static ensureBriefPairs() {
     if (this.briefPairs) return;
 
@@ -252,6 +245,7 @@ class CustomTracker {
     return ((v + (v >> 4)) & 0x0f) * 0x01;
   }
 
+  // Compute Hamming distance between two BRIEF descriptors
   static hammingPacked(a, b) {
     let d = 0;
     for (let i = 0; i < a.length; i++) {
@@ -303,6 +297,7 @@ class CustomTracker {
     };
   }
 
+  // Match features between two sets of descriptors
   static matchFeatures(descA, descB, maxDistance = 75, ratio = 0.7) {
     const matches = [];
 
@@ -338,6 +333,7 @@ class CustomTracker {
     return matches;
   }
 
+  // Estimate affine transform from two pairs of matched points
   static solveAffineFromTwoPairs(p1, p2, q1, q2, cx, cy) {
     const p1x = p1.x - cx;
     const p1y = p1.y - cy;
@@ -368,6 +364,7 @@ class CustomTracker {
     return { scale, angle, tx, ty };
   }
 
+  // Robustly estimate affine transform using RANSAC
   static solveAffineRansac(markerKp, frameKp, matches, cx, cy) {
     if (!matches || matches.length < 2) return null;
 
@@ -465,11 +462,8 @@ class CustomTracker {
   }
 }
 
-/* ---------------------------
-   THREE LOADING
----------------------------- */
-
-async function ensureThreeLoaded() {
+// Load Three.js and GLTFLoader when AR is started
+async function ThreeLoaded() {
   if (THREE_MODULE && GLTFLoaderClass) return;
 
   const threeImport = await import("https://esm.sh/three@0.160.0");
@@ -479,10 +473,7 @@ async function ensureThreeLoaded() {
   GLTFLoaderClass = loaderImport.GLTFLoader;
 }
 
-/* ---------------------------
-   UI EVENTS
----------------------------- */
-
+// Upload Image
 imageUpload.addEventListener("change", function () {
   const file = this.files[0];
 
@@ -507,7 +498,7 @@ imageUpload.addEventListener("change", function () {
       disableGeneratedButtons();
 
       setStatus(
-        "Image uploaded successfully. The original image is shown in preview. Click Generate to extract target features."
+        "Image uploaded successfully. Click Generate to extract target features."
       );
     };
 
@@ -517,6 +508,7 @@ imageUpload.addEventListener("change", function () {
   reader.readAsDataURL(file);
 });
 
+// Select 3D model
 modelSelect.addEventListener("change", async function () {
   currentModelKey = this.value;
   const cfg = getCurrentModelConfig();
@@ -524,16 +516,12 @@ modelSelect.addEventListener("change", async function () {
   setStatus(`Selected 3D model: ${cfg.label}`);
 
   if (isArRunning && trackedObjectRoot && gltfLoader) {
-    try {
       await loadModel();
       setStatus(`Model switched to: ${cfg.label}`);
-    } catch (error) {
-      console.error("Model switch failed:", error);
-      setStatus(`Failed to switch model: ${error.message || "Unknown error"}`);
-    }
   }
 });
 
+// Generate feature
 generateBtn.addEventListener("click", function () {
   if (!uploadedImageData) {
     setStatus("Please upload an image first.");
@@ -547,7 +535,7 @@ generateBtn.addEventListener("click", function () {
     targetFeatures = null;
     disableGeneratedButtons();
     clearGeneratedPreviews();
-    setStatus("No stable feature points were found. Try another image with more texture or contrast.");
+    setStatus("No feature points found.");
     return;
   }
 
@@ -557,72 +545,46 @@ generateBtn.addEventListener("click", function () {
   enableGeneratedButtons();
 
   setStatus(
-    `Feature analysis completed successfully. ${targetFeatures.keypoints.length} keypoints extracted. Model is ready for AR.`
+    `${targetFeatures.keypoints.length} keypoints extracted.`
   );
 });
 
+// Start AR
 startArBtn.addEventListener("click", async function () {
   if (startArBtn.disabled) return;
 
-  if (!targetFeatures || targetFeatures.keypoints.length === 0) {
-    setStatus("Please generate target features before starting AR.");
-    return;
-  }
+  webcamStream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: "environment" } },
+    audio: false
+  });
 
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    setStatus("This browser does not support webcam access.");
-    return;
-  }
+  arVideo.srcObject = webcamStream;
+  arView.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
 
-  try {
-    try {
-      webcamStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
-        audio: false
-      });
-    } catch {
-      webcamStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: false
-      });
-    }
+  await new Promise((resolve, reject) => {
+    arVideo.onloadedmetadata = () => resolve();
+    arVideo.onerror = () => reject(new Error("Video metadata failed to load"));
+  });
 
-    arVideo.srcObject = webcamStream;
-    arView.classList.remove("hidden");
-    document.body.style.overflow = "hidden";
+  await arVideo.play();
+  setupArOverlay();
 
-    await new Promise((resolve, reject) => {
-      arVideo.onloadedmetadata = () => resolve();
-      arVideo.onerror = () => reject(new Error("Video metadata failed to load"));
-    });
+  await ThreeLoaded();
+  setupThreeScene();
+  resizeThreeScene();
+  await loadModel();
 
-    await arVideo.play();
-    setupArOverlay();
-
-    await ensureThreeLoaded();
-    setupThreeScene();
-    resizeThreeScene();
-    await loadModel();
-
-    startArProcessingLoop();
-    setStatus(`AR view started with ${getCurrentModelConfig().label}.`);
-  } catch (error) {
-    console.error("Start AR failed:", error);
-    setStatus(`Start AR failed: ${error.name || "Error"} - ${error.message || ""}`);
-    closeArView();
-  }
+  startArProcessingLoop();
 });
 
+// Back button to navigate back to home page
 backBtn.addEventListener("click", function () {
   closeArView();
 });
 
+// Save generated feature preview as image
 saveBtn.addEventListener("click", function () {
-  if (!isGenerated) {
-    setStatus("Save is disabled until Generate is clicked.");
-    return;
-  }
-
   const link = document.createElement("a");
   link.href = featureCanvas.toDataURL("image/png");
   link.download = "feature-analysis-result.png";
@@ -632,10 +594,6 @@ saveBtn.addEventListener("click", function () {
 
   setStatus("Generated image saved to your local device.");
 });
-
-/* ---------------------------
-   UI HELPERS
----------------------------- */
 
 function showOriginalPreview() {
   originalPlaceholder.style.display = "none";
@@ -755,10 +713,7 @@ window.addEventListener("resize", function () {
   }
 });
 
-/* ---------------------------
-   FEATURE EXTRACTION
----------------------------- */
-
+// Extract features from the uploaded target image
 function extractTargetFeatures(img) {
   const maxWidth = 480;
   let width = img.width;
@@ -778,9 +733,9 @@ function extractTargetFeatures(img) {
   ctx.drawImage(img, 0, 0, width, height);
 
   const imageData = ctx.getImageData(0, 0, width, height);
-  const grayImg = CustomTracker.getGrayscale(imageData);
-  const keypoints = CustomTracker.detectFAST(grayImg, 25);
-  const brief = CustomTracker.computeBRIEF(grayImg, keypoints);
+  const grayImg = FeatureTracker.getGrayscale(imageData);
+  const keypoints = FeatureTracker.detectFAST(grayImg, 25);
+  const brief = FeatureTracker.computeBRIEF(grayImg, keypoints);
 
   return {
     width,
@@ -793,6 +748,7 @@ function extractTargetFeatures(img) {
   };
 }
 
+// Extract features from a video frame
 function extractFrameFeaturesFromVideo(video) {
   const sourceWidth = video.videoWidth;
   const sourceHeight = video.videoHeight;
@@ -812,9 +768,9 @@ function extractFrameFeaturesFromVideo(video) {
   frameCtx.drawImage(video, 0, 0, width, height);
 
   const imageData = frameCtx.getImageData(0, 0, width, height);
-  const grayImg = CustomTracker.getGrayscale(imageData);
-  const keypoints = CustomTracker.detectFAST(grayImg, 25);
-  const brief = CustomTracker.computeBRIEF(grayImg, keypoints);
+  const grayImg = FeatureTracker.getGrayscale(imageData);
+  const keypoints = FeatureTracker.detectFAST(grayImg, 25);
+  const brief = FeatureTracker.computeBRIEF(grayImg, keypoints);
 
   return {
     width,
@@ -825,12 +781,14 @@ function extractFrameFeaturesFromVideo(video) {
   };
 }
 
+// Draw feature detection results on the preview
 function drawFeaturePreview(featureData) {
   const { width, height, gray, keypoints } = featureData;
   drawGrayscalePreview(width, height, gray);
   drawFeaturePointsPreview(width, height, gray, keypoints);
 }
 
+// Draw grayscale image and detected keypoints on the preview
 function drawGrayscalePreview(width, height, gray) {
   const ctx = grayscaleCanvas.getContext("2d");
 
@@ -852,6 +810,7 @@ function drawGrayscalePreview(width, height, gray) {
   showGrayscalePreview();
 }
 
+// Draw feature points on top of the grayscale image in the preview
 function drawFeaturePointsPreview(width, height, gray, keypoints) {
   const ctx = featureCanvas.getContext("2d");
 
@@ -881,12 +840,9 @@ function drawFeaturePointsPreview(width, height, gray, keypoints) {
   showFeaturePreview();
 }
 
-/* ---------------------------
-   TRACKING
----------------------------- */
-
+// Match target features with frame features and estimate the target's position in the video frame
 function trackTargetInFrame(targetFeaturesData, frameFeatures) {
-  const rawMatches = CustomTracker.matchFeatures(
+  const rawMatches = FeatureTracker.matchFeatures(
     targetFeaturesData.descriptors,
     frameFeatures.descriptors,
     MATCH_MAX_DISTANCE
@@ -902,7 +858,7 @@ function trackTargetInFrame(targetFeaturesData, frameFeatures) {
     };
   }
 
-  const model = CustomTracker.solveAffineRansac(
+  const model = FeatureTracker.solveAffineRansac(
     targetFeaturesData.keypoints,
     frameFeatures.keypoints,
     rawMatches,
@@ -937,6 +893,7 @@ function trackTargetInFrame(targetFeaturesData, frameFeatures) {
   };
 }
 
+// Convert matched feature indices into actual point coordinates for overlay visualization
 function mapMatchesForOverlay(matches, targetKeypoints, frameKeypoints) {
   return matches.map((m) => ({
     targetPoint: {
@@ -951,6 +908,7 @@ function mapMatchesForOverlay(matches, targetKeypoints, frameKeypoints) {
   }));
 }
 
+// Use the estimated affine transform to project the corners of the target image onto the video frame for AR overlay
 function projectCornersFromAffine(width, height, model, cx, cy) {
   const corners = [
     { x: 0, y: 0 },
@@ -973,10 +931,7 @@ function projectCornersFromAffine(width, height, model, cx, cy) {
   });
 }
 
-/* ---------------------------
-   LOOP + OVERLAY
----------------------------- */
-
+// Capture video frames, extract features, perform tracking, and update the AR overlay and 3D model position in a loop
 function startArProcessingLoop() {
   if (isArRunning) return;
 
@@ -1043,6 +998,7 @@ function stopArProcessingLoop() {
   ctx.clearRect(0, 0, arOverlay.width, arOverlay.height);
 }
 
+// Draw tracking results and feature points on the AR overlay canvas for visualization and debugging
 function drawArOverlay() {
   const ctx = arOverlay.getContext("2d");
   ctx.clearRect(0, 0, arOverlay.width, arOverlay.height);
@@ -1091,6 +1047,7 @@ function drawArOverlay() {
   }
 }
 
+// Update the status message with current tracking information, including the number of keypoints, matches, and whether the target is currently found or being tracked
 function updateTrackingStatus(frameFeatures, trackingResult) {
   if (!frameFeatures) return;
 
@@ -1129,10 +1086,7 @@ Inliers: ${inliers}`
   }
 }
 
-/* ---------------------------
-   THREE / MODEL
----------------------------- */
-
+// Initialize Three.js scene, camera, lights, and GLTF loader for rendering the 3D model in AR
 function setupThreeScene() {
   if (!THREE_MODULE) throw new Error("THREE_MODULE is not loaded");
   if (!GLTFLoaderClass) throw new Error("GLTFLoaderClass is not loaded");
@@ -1207,6 +1161,7 @@ function clearTrackedObjectRoot() {
   }
 }
 
+// Load the selected 3D model
 async function loadModel() {
   if (!trackedObjectRoot || !gltfLoader || !THREE_MODULE) return;
 
